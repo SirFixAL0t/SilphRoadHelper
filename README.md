@@ -23,7 +23,8 @@ g
 ### -o --open [Optional]
   Open the URL in the desired location if any of the pokemons are found in that location. 
   Disabled automatically if reading locations from file
-
+### -c --collection [Optional]
+  The location of a file containing the list of pokemons you are looking for in a JSON array format. This replaces any -p --pokemon sent. 
 ## Location
 This is a simple Latitude, Longitude comma separated "touple". For example, Grapevine, TX is "32.9124,-97.0593". <br/>
 If you seek to check multiple locations at the same time, you can do so by sending the -s argument instead of -l. <br />
@@ -57,7 +58,17 @@ python parse.py --pokemon "charmander"
 ```
 python parse.py --pokemon "charmander, bulbasaur, pikachu"
 ```
-If the parser finds any of the 3 pokemons in the area given by either **-l** or **-s**, it will output a message showing that it was found.
+-OR-
+```
+python parse.py -c wanted_pokemons.json
+```
+
+wanted_pokemons.json:
+```json
+["mew", "zapdos", "articuno"]
+```
+
+If the parser finds any of the 3 pokemons in the area given by either **-l** or **-s**, it will output a message showing that it was found and the URL to thesilphroad's website with the right coordinates and zoom to make it easy to find the location of the pokemon.
 
 ## Zoom
 
