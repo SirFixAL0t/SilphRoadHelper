@@ -1,9 +1,9 @@
 import sys
 import getopt
-import urllib.parse
-import urllib.request
+import requests
 import json
 import webbrowser
+import pathlib
 
 # API Config
 SCRIPT = "https://thesilphroad.com/atlas/getLocalNests.json"
@@ -21,6 +21,7 @@ POKEMON_FILE = 'pokemons.json'
 POKEMON_INDEX = 'pokemon'
 UNVERIFIED_INDEX = 'unverified'
 OPEN_SITE_INDEX = 'open'
+POKEMON_COLLECTION_INDEX = 'collection'
 
 # Zoom limitations
 ZOOM_INDEX = 'zoom'
@@ -39,6 +40,9 @@ LONG_NAME = 'long'
 
 
 def load_as_json(filename):
+    if not pathlib.Path(filename).exists():
+        print("File %s does not exist" % filename)
+        sys.exit(2)
     with open(filename) as data_file:
         data = json.load(data_file)
     return data
@@ -48,10 +52,10 @@ poke_data = load_as_json(POKEMON_FILE)
 
 
 def print_help(script):
-    print(script + " -l <%s[Optional]> -s <%s[Optiona]> -p <%s> \
-                           -z <%s[Optional=%d]> -u <%s[Optional=False] -s <%s[Optional=False]"
+    print(script + " -l <%s[Optional]> -s <%s[Optiona]> -p <%s[Optional]> \
+                           -z <%s[Optional=%d]> -u <%s[Optional=False] -s <%s[Optional=False] -c <%s[Optional]>"
           % (LOCATION_INDEX, LOCATION_FILE_INDEX, POKEMON_INDEX,
-             ZOOM_INDEX, ZOOM_DEFAULT, UNVERIFIED_INDEX, OPEN_SITE_INDEX))
+             ZOOM_INDEX, ZOOM_DEFAULT, UNVERIFIED_INDEX, OPEN_SITE_INDEX, POKEMON_COLLECTION_INDEX))
     print("-l --%s The Location where you want to search pokemons for, in the lat,long format" % LOCATION_INDEX)
     print("-s --%s The file containing all the locations to iterate through in the Format "
           "of a JSON array. Each index being the name of the location, and the value being an array of lat and long" % LOCATION_FILE_INDEX)
@@ -60,21 +64,26 @@ def print_help(script):
     print("-u --%s Include unverified nests?" % UNVERIFIED_INDEX)
     print("-o --%s Open the URL in the desired location if any of the pokemons are found in that location. "
           "Disabled automatically if reading locations from file" % OPEN_SITE_INDEX)
+    print("-c --%s Collection of pokemons being seek.")
 
 
 def parse(argv):
     script = argv.pop(0)
-    sopts = 'l:s:pz:u:o:'
+    sopts = 'l:s:p:z:u:o:c:'
     lopts = []
-    for key in (LOCATION_INDEX, POKEMON_INDEX, ZOOM_INDEX, UNVERIFIED_INDEX, OPEN_SITE_INDEX, LOCATION_FILE_INDEX):
+    for key in (LOCATION_INDEX, POKEMON_INDEX, ZOOM_INDEX, UNVERIFIED_INDEX, OPEN_SITE_INDEX, LOCATION_FILE_INDEX, POKEMON_COLLECTION_INDEX):
         lopts.append("%s=" % key)
 
     data = {ZOOM_INDEX: ZOOM_DEFAULT, UNVERIFIED_INDEX: False,
-            LOCATION_INDEX: False, POKEMON_INDEX: False, OPEN_SITE_INDEX: False, LOCATION_FILE_INDEX: False}
+            LOCATION_INDEX: False, POKEMON_INDEX: False, OPEN_SITE_INDEX: False, LOCATION_FILE_INDEX: False, POKEMON_COLLECTION_INDEX: False}
 
     try:
         opts, args = getopt.getopt(argv, sopts, lopts)
     except getopt.GetoptError:
+        print_help(script)
+        sys.exit(2)
+
+    if len(opts) == 0:
         print_help(script)
         sys.exit(2)
 
@@ -107,7 +116,11 @@ def parse(argv):
               "needs to be a JSON file in the way of {'Location Alias': [Lat, Long]}")
         sys.exit(2)
 
-    if POKEMON_INDEX in data:
+    if data[POKEMON_COLLECTION_INDEX]:
+        pokemons = load_as_json(data[POKEMON_COLLECTION_INDEX])
+        data[POKEMON_INDEX] = ",".join(pokemons)
+
+    if data[POKEMON_INDEX]:
         data[POKEMON_INDEX] = translate_pokemon(str(data[POKEMON_INDEX]).split(','))
 
     if POKEMON_INDEX not in data:
@@ -195,26 +208,16 @@ def find_pokemon(data, location, name):
         'mapFilterValues[specieses][]': data[POKEMON_INDEX],
     }
 
-    bdata = urllib.parse.urlencode(sdata, True).encode('utf-8')
-
     try:
-        request = urllib.request.Request(SCRIPT, data=bdata)
-        response = urllib.request.urlopen(request)
-    except urllib.request.HTTPError:
+        response = requests.post(SCRIPT, sdata)
+    except requests.HTTPError:
         print("HTTP Error contacting %s with data %s" % (SCRIPT, sdata))
         sys.exit(2)
 
-    response_dict = json.load(response)
+    response_dict = response.json()
 
     if (MARKER_NAME not in response_dict) or (len(response_dict[MARKER_NAME]) == 0):
-        pokemon_names = []
-        for pokemon_id in data[POKEMON_INDEX]:
-            if isinstance(pokemon_id, str):
-                pokemon_names.append(pokemon_id)
-            else:
-                pokemon_names.append(translate_id_to_name(pokemon_id))
-
-        print("Couldn't find any %s in %s" % (",".join(pokemon_names), name))
+        print("Couldn't find any pokemons in %s" % name)
         return
 
     pokemons_found = set()
